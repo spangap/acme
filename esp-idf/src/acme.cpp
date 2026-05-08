@@ -13,6 +13,7 @@
 #include "cron.h"
 #include "cli.h"
 #include "log.h"
+#include "web.h"
 #include "compat.h"
 #include <esp_http_client.h>
 #include <esp_crt_bundle.h>
@@ -890,6 +891,9 @@ void acmeInit() {
         cronDefault("0 3 * * * N", "cert acme 30");
         storageSet("s.acme.version", ACME_VERSION);
     }
+
+    /* HTTP-01 challenge serving: web maps /.well-known to /state/.well-known. */
+    webMapAddIfAbsent("/.well-known", FS_STATE "/.well-known", 0, 0, nullptr);
 
     /* Pre-create webdir (fs_mkdirp handles PSRAM-safety automatically) */
     char webdir[128];
