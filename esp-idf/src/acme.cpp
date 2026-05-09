@@ -3,7 +3,8 @@
  *
  * Implements ACMEv2 (RFC 8555) with ES256 JWS signatures.
  * DNS-01: sets dns.txtrecord config var, resolves TXT via 8.8.8.8 to verify.
- * HTTP-01: writes challenge file to s.acme.webdir, served by web task.
+ * HTTP-01: serves /<token> in-memory at /.well-known/acme-challenge/ via
+ *          a web URL handler — no flash writes, cleared after the order completes.
  * Runs on a temporary 16KB task for crypto + HTTPS operations.
  */
 #include "acme.h"
@@ -333,9 +334,29 @@ static bool waitForTxtRecord(const char* name, const char* expected) {
     return false;
 }
 
-/* ---- HTTP-01 challenge file helpers ---- */
+/* ---- HTTP-01 challenge state ---- */
 
-/* fs_mkdirp() is in fs.h */
+/* Set during a single HTTP-01 attempt by acmeRunOnce(); read by the web URL
+ * handler when the CA fetches /.well-known/acme-challenge/<token>. Cleared
+ * after the authorization polls valid/invalid (or on bail-out). One in-flight
+ * order at a time — acme is gated behind acmeBusy in acmeStart. */
+static std::string http01Token;
+static std::string http01KeyAuth;
+
+static void acmeHttp01Handler(int h, const char* hdr, int hlen) {
+    char path[96];
+    if (!webGetPath(hdr, hlen, path, sizeof(path))) { webSendStatus(h, 404); return; }
+    /* path is e.g. ".well-known/acme-challenge/<token>" — match against the
+     * single in-flight token. Strict comparison (no path traversal possible). */
+    static constexpr const char prefix[] = ".well-known/acme-challenge/";
+    static constexpr size_t prefixLen = sizeof(prefix) - 1;
+    if (strncmp(path, prefix, prefixLen) != 0) { webSendStatus(h, 404); return; }
+    if (http01Token.empty() || http01Token != (path + prefixLen)) {
+        webSendStatus(h, 404); return;
+    }
+    webSendResponse(h, 200, "text/plain",
+                    http01KeyAuth.data(), http01KeyAuth.size());
+}
 
 /* ---- ACME client state ---- */
 
@@ -638,25 +659,27 @@ static bool acmeFlow(acme_state_t& st) {
                 return false;
             }
         } else {
-            /* HTTP-01: write challenge file to s.acme.webdir (dir created in acmeInit) */
-            char webdir[128];
-            storageGetStr("s.acme.webdir", webdir, sizeof(webdir), "/state/.well-known/acme-challenge");
-            char challPath[192];
-            snprintf(challPath, sizeof(challPath), "%.127s/%.60s", webdir, token.c_str());
-            int cf = fs_open(challPath, "w");
-            if (cf < 0) { err("ACME: failed to write %s\n", challPath); return false; }
-            fs_write(keyAuth.c_str(), 1, keyAuth.size(), cf);
-            fs_close(cf);
-            cliPrintf("  Writing HTTP-01 challenge: %s\n", challPath);
-            info("ACME: challenge file written to %s\n", challPath);
+            /* HTTP-01: stash the (token, keyAuth) pair so acmeHttp01Handler
+             * can serve it in-memory. No flash writes. */
+            http01Token   = token;
+            http01KeyAuth = keyAuth;
+            cliPrintf("  Serving HTTP-01 challenge for token %.8s…\n", token.c_str());
+            info("ACME: HTTP-01 challenge armed (token %.8s…)\n", token.c_str());
         }
+
+        /* Cleanup helper: clear whichever side's challenge response we set up,
+         * so failures and successes both leave no trailing state behind. */
+        auto clearChallenge = [&] {
+            if (useDns01) storageSet("dns.txtrecord", "");
+            else { http01Token.clear(); http01KeyAuth.clear(); }
+        };
 
         /* 8. Respond to challenge */
         info("ACME: responding to challenge\n");
         auto challResp = acmeJwsPost(st, challUrl.c_str(), "{}");
         if (challResp.status != 200) {
             err("ACME challenge: %d %s\n", challResp.status, challResp.body.c_str());
-            if (useDns01) storageSet("dns.txtrecord", "");
+            clearChallenge();
             return false;
         }
 
@@ -673,14 +696,14 @@ static bool acmeFlow(acme_state_t& st) {
             }
             if (status == "invalid") {
                 err("ACME: authorization invalid: %s\n", poll.body.c_str());
-                if (useDns01) storageSet("dns.txtrecord", "");
+                clearChallenge();
                 return false;
             }
             dbg("ACME: authz status=%s\n", status.c_str());
         }
 
         /* 10. Clean up challenge */
-        if (useDns01) storageSet("dns.txtrecord", "");
+        clearChallenge();
 
         /* 11. Generate CSR */
         info("ACME: generating CSR\n");
@@ -783,6 +806,12 @@ static bool acmeFlow(acme_state_t& st) {
 /* ---- Task ---- */
 
 static void acmeTask(void* arg) {
+    /* Register the HTTP-01 URL handler now (web is up by the time anyone
+     * triggers a renewal; acmeInit runs before webInit, so we can't do it
+     * there). Idempotent — webRegisterHandler updates in place if already
+     * registered. */
+    webRegisterHandler(".well-known/acme-challenge", acmeHttp01Handler);
+
     acme_state_t st;
     if (!st.init()) { err("ACME: init failed\n"); goto done; }
 
@@ -887,18 +916,12 @@ void acmeInit() {
         storageDefault("s.acme.enable", 0);
         storageDefault("s.acme.url", "");
         storageDefault("s.acme.method", "");
-        storageDefault("s.acme.webdir", FS_STATE "/.well-known/acme-challenge");
         cronDefault("0 3 * * * N", "cert acme 30");
         storageSet("s.acme.version", ACME_VERSION);
     }
 
-    /* HTTP-01 challenge serving: web maps /.well-known to /state/.well-known. */
-    webMapAddIfAbsent("/.well-known", FS_STATE "/.well-known", 0, 0, nullptr);
-
-    /* Pre-create webdir (fs_mkdirp handles PSRAM-safety automatically) */
-    char webdir[128];
-    storageGetStr("s.acme.webdir", webdir, sizeof(webdir), FS_STATE "/.well-known/acme-challenge");
-    fs_mkdirp(webdir);
+    /* HTTP-01 challenge serving: handler is registered lazily in acmeTask —
+     * acmeInit runs before webInit, so we can't register here. */
 
     cliRegisterCmd("cert acme", [](const char* a) {
         if (strcmp(a, "help") == 0) {
