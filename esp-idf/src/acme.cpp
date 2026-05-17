@@ -50,7 +50,7 @@
 /* ---- State file helpers (certs on /state/ LittleFS partition) ---- */
 
 static std::string statePath(const char* key) {
-    return std::string("/state/") + key + ".pem";
+    return std::string(fsStateDir()) + "/" + key + ".pem";
 }
 
 static bool stateWrite(const char* key, const uint8_t* data, size_t len) {
