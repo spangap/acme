@@ -909,6 +909,20 @@ void acmeCheck(int minDays) {
     vSemaphoreDelete(sem);
 }
 
+#if CONFIG_DIPTYCH_LCD
+#include "lcd.h"
+/* On-device Settings → Net → ACME pane. Mirrors the browser AcmePanel. Runs on
+ * the lcd task; storage keys must be static (the helpers store them by pointer). */
+static void acmeSettingsPane(void* arg) {
+    lv_obj_t* p = static_cast<lv_obj_t*>(arg);
+    lcdSettingSection (p, "ACME");
+    lcdSettingSwitch  (p, "Enable",    "s.acme.enable");
+    lcdSettingText    (p, "Domain",    "s.net.dns.fqdn");
+    lcdSettingDropdown(p, "Method",    "s.acme.method", ",DNS-01,HTTP-01");
+    lcdSettingText    (p, "Directory", "s.acme.url");
+}
+#endif
+
 void acmeInit() {
     /* Self-register: install own defaults + cron entry on first run / upgrade. */
     int v = storageGetInt("s.acme.version", 0);
@@ -919,6 +933,10 @@ void acmeInit() {
         cronDefault("0 3 * * * N", "cert acme 30");
         storageSet("s.acme.version", ACME_VERSION);
     }
+
+#if CONFIG_DIPTYCH_LCD
+    lcdRegisterSettings("Net/ACME", "ACME", acmeSettingsPane);
+#endif
 
     /* HTTP-01 challenge serving: handler is registered lazily in acmeTask —
      * acmeInit runs before webInit, so we can't register here. */
