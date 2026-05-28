@@ -1,0 +1,15 @@
+# acme — ACME (Let's Encrypt) TLS certificates for spangap.
+#
+# HTTP-01 challenge handler is passive code that only compiles when
+# spangap-web is in the graph; DNS-01 (via DuckDNS) is the always-on
+# path. A spangap-web-less build runs DNS-01-only and will error at
+# runtime if no TXT-capable provider is configured.
+schema_version: 1
+name: spangap/acme
+prefix: acme
+version: 0.1.0
+firmware: esp-idf
+browser: browser
+platforms: [idf]
+requires:
+  - spangap/spangap-net

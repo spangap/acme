@@ -909,7 +909,7 @@ void acmeCheck(int minDays) {
     vSemaphoreDelete(sem);
 }
 
-#if CONFIG_DIPTYCH_LCD
+#if CONFIG_SPANGAP_LCD
 #include "lcd.h"
 /* On-device Settings → Net → ACME pane. Mirrors the browser AcmePanel. Runs on
  * the lcd task; storage keys must be static (the helpers store them by pointer). */
@@ -934,7 +934,7 @@ void acmeInit() {
         storageSet("s.acme.version", ACME_VERSION);
     }
 
-#if CONFIG_DIPTYCH_LCD
+#if CONFIG_SPANGAP_LCD
     lcdRegisterSettings("Net/ACME", "ACME", acmeSettingsPane);
 #endif
 
