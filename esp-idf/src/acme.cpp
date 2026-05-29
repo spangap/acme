@@ -14,7 +14,9 @@
 #include "cron.h"
 #include "cli.h"
 #include "log.h"
+#if CONFIG_SPANGAP_WEB
 #include "web.h"
+#endif
 #include "compat.h"
 #include <esp_http_client.h>
 #include <esp_crt_bundle.h>
@@ -336,10 +338,15 @@ static bool waitForTxtRecord(const char* name, const char* expected) {
 
 /* ---- HTTP-01 challenge state ---- */
 
+#if CONFIG_SPANGAP_WEB
 /* Set during a single HTTP-01 attempt by acmeRunOnce(); read by the web URL
  * handler when the CA fetches /.well-known/acme-challenge/<token>. Cleared
  * after the authorization polls valid/invalid (or on bail-out). One in-flight
- * order at a time — acme is gated behind acmeBusy in acmeStart. */
+ * order at a time — acme is gated behind acmeBusy in acmeStart.
+ *
+ * HTTP-01 requires spangap-web — staging that straddle is what unlocks both
+ * the web.h symbols below and the CONFIG_SPANGAP_WEB define. A --no-web build
+ * runs DNS-01-only (see challenge-method selection in acmeFlow). */
 static std::string http01Token;
 static std::string http01KeyAuth;
 
@@ -357,6 +364,7 @@ static void acmeHttp01Handler(int h, const char* hdr, int hlen) {
     webSendResponse(h, 200, "text/plain",
                     http01KeyAuth.data(), http01KeyAuth.size());
 }
+#endif /* CONFIG_SPANGAP_WEB */
 
 /* ---- ACME client state ---- */
 
@@ -612,14 +620,24 @@ static bool acmeFlow(acme_state_t& st) {
             return false;
         }
 
-        /* Determine challenge method: explicit override, or auto (DNS-01 if capable, else HTTP-01) */
+        /* Determine challenge method: explicit override, or auto (DNS-01 if capable, else HTTP-01).
+         * A --no-web build (CONFIG_SPANGAP_WEB undefined) has no HTTP-01 handler — force DNS-01,
+         * and reject an explicit HTTP-01 override at the top so the failure is loud. */
         char method[16];
         storageGetStr("s.acme.method", method, sizeof(method));
         bool useDns01;
+#if CONFIG_SPANGAP_WEB
         if (method[0])
             useDns01 = (strcasecmp(method, "HTTP-01") != 0);
         else
             useDns01 = (storageGetInt("dns.txtrecord.capable", 0) != 0);
+#else
+        if (method[0] && strcasecmp(method, "HTTP-01") == 0) {
+            err("ACME: HTTP-01 requested but this build has no spangap-web — set s.acme.method to DNS-01 (requires a TXT-capable provider) or rebuild with spangap-web.\n");
+            return false;
+        }
+        useDns01 = true;
+#endif
         const char* challType = useDns01 ? "dns-01" : "http-01";
 
         /* Find challenge of the selected type */
@@ -659,19 +677,28 @@ static bool acmeFlow(acme_state_t& st) {
                 return false;
             }
         } else {
+#if CONFIG_SPANGAP_WEB
             /* HTTP-01: stash the (token, keyAuth) pair so acmeHttp01Handler
              * can serve it in-memory. No flash writes. */
             http01Token   = token;
             http01KeyAuth = keyAuth;
             cliPrintf("  Serving HTTP-01 challenge for token %.8s…\n", token.c_str());
             info("ACME: HTTP-01 challenge armed (token %.8s…)\n", token.c_str());
+#else
+            /* Unreachable: useDns01 is forced true above when CONFIG_SPANGAP_WEB
+             * is unset. Belt-and-braces in case the gate is bypassed. */
+            err("ACME: HTTP-01 path entered but no spangap-web in build\n");
+            return false;
+#endif
         }
 
         /* Cleanup helper: clear whichever side's challenge response we set up,
          * so failures and successes both leave no trailing state behind. */
         auto clearChallenge = [&] {
             if (useDns01) storageSet("dns.txtrecord", "");
+#if CONFIG_SPANGAP_WEB
             else { http01Token.clear(); http01KeyAuth.clear(); }
+#endif
         };
 
         /* 8. Respond to challenge */
@@ -806,11 +833,14 @@ static bool acmeFlow(acme_state_t& st) {
 /* ---- Task ---- */
 
 static void acmeTask(void* arg) {
+#if CONFIG_SPANGAP_WEB
     /* Register the HTTP-01 URL handler now (web is up by the time anyone
      * triggers a renewal; acmeInit runs before webInit, so we can't do it
      * there). Idempotent — webRegisterHandler updates in place if already
-     * registered. */
+     * registered. A --no-web build skips this; HTTP-01 is unavailable and
+     * acmeFlow forces DNS-01. */
     webRegisterHandler(".well-known/acme-challenge", acmeHttp01Handler);
+#endif
 
     acme_state_t st;
     if (!st.init()) { err("ACME: init failed\n"); goto done; }
@@ -918,7 +948,12 @@ static void acmeSettingsPane(void* arg) {
     lcdSettingSection (p, "ACME");
     lcdSettingSwitch  (p, "Enable",    "s.acme.enable");
     lcdSettingText    (p, "Domain",    "s.net.dns.fqdn");
+#if CONFIG_SPANGAP_WEB
     lcdSettingDropdown(p, "Method",    "s.acme.method", ",DNS-01,HTTP-01");
+#else
+    /* No HTTP-01 in this build — present DNS-01 as the only option. */
+    lcdSettingDropdown(p, "Method",    "s.acme.method", ",DNS-01");
+#endif
     lcdSettingText    (p, "Directory", "s.acme.url");
 }
 #endif
