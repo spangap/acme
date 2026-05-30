@@ -26,3 +26,6 @@ browser/node_modules/
 browser/dist/
 browser/.quasar/
 *.pyo
+
+# Generated browser/npm artifacts (regenerated each build)
+**/package-lock.json
