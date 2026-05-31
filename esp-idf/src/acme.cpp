@@ -27,6 +27,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <ctime>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -554,7 +555,7 @@ static bool acmeLoadOrCreateDomainKey(mbedtls_pk_context* key, mbedtls_ctr_drbg_
 
 static bool acmeFlow(acme_state_t& st) {
     /* 1. Fetch directory */
-    cliPrintf("  Contacting server: %s\n", ACME_DIR);
+    cliPrintf("Contacting server: %s\n", ACME_DIR);
     info("ACME: fetching directory\n");
     auto dir = acmeGet(ACME_DIR);
     if (dir.status != 200) { err("ACME directory: %d\n", dir.status); return false; }
@@ -667,7 +668,7 @@ static bool acmeFlow(acme_state_t& st) {
             uint8_t keyAuthHash[32];
             mbedtls_sha256((const uint8_t*)keyAuth.c_str(), keyAuth.size(), keyAuthHash, 0);
             std::string txtValue = b64url(keyAuthHash, 32);
-            cliPrintf("  Setting DNS TXT record: %s\n", txtValue.c_str());
+            cliPrintf("Setting DNS TXT record: %s\n", txtValue.c_str());
             info("ACME: setting dns.txtrecord for DNS-01\n");
             storageSet("dns.txtrecord", txtValue.c_str());
             /* Verify TXT record appears via DNS resolution */
@@ -682,7 +683,7 @@ static bool acmeFlow(acme_state_t& st) {
              * can serve it in-memory. No flash writes. */
             http01Token   = token;
             http01KeyAuth = keyAuth;
-            cliPrintf("  Serving HTTP-01 challenge for token %.8s…\n", token.c_str());
+            cliPrintf("Serving HTTP-01 challenge for token %.8s…\n", token.c_str());
             info("ACME: HTTP-01 challenge armed (token %.8s…)\n", token.c_str());
 #else
             /* Unreachable: useDns01 is forced true above when CONFIG_SPANGAP_WEB
@@ -711,7 +712,7 @@ static bool acmeFlow(acme_state_t& st) {
         }
 
         /* 9. Poll authorization until valid */
-        cliPrintf("  Waiting for CA\n");
+        cliPrintf("Waiting for CA\n");
         info("ACME: polling authorization\n");
         for (int i = 0; i < 24; i++) {  // up to 2 minutes
             vTaskDelay(pdMS_TO_TICKS(5000));
@@ -928,8 +929,8 @@ void acmeCheck(int minDays) {
 
     char fqdn[64] = {};
     storageGetStr("s.net.dns.fqdn", fqdn, sizeof(fqdn));
-    cliPrintf("  %s\n", reason);
-    cliPrintf("  Requesting ACME cert for %s (3 min timeout)\n", fqdn[0] ? fqdn : "?");
+    cliPrintf("%s\n", reason);
+    cliPrintf("Requesting ACME cert for %s (3 min timeout)\n", fqdn[0] ? fqdn : "?");
     info("ACME: %s — requesting cert for %s\n", reason, fqdn[0] ? fqdn : "?");
 
     /* Spawn renewal task and wait */
@@ -965,7 +966,7 @@ void acmeInit() {
         storageDefault("s.acme.enable", 0);
         storageDefault("s.acme.url", "");
         storageDefault("s.acme.method", "");
-        cronDefault("0 3 * * * N", "cert acme 30");
+        cronDefault("0 3 * * * N", "acme renew 30");
         storageSet("s.acme.version", ACME_VERSION);
     }
 
@@ -976,21 +977,33 @@ void acmeInit() {
     /* HTTP-01 challenge serving: handler is registered lazily in acmeTask —
      * acmeInit runs before webInit, so we can't register here. */
 
-    cliRegisterCmd("cert acme", [](const char* a) {
-        if (strcmp(a, "help") == 0) {
-            cliPrintf("  %-*s get/renew ACME cert\n", CLI_HELP_COL, "cert acme [days]");
+    /* Was `cert acme`; promoted to a top-level `acme` command. Bare `acme`
+     * shows status; `acme renew [days]` (or a bare day count) gets/renews. */
+    cliRegisterCmd("acme", [](const char* a) {
+        if (strcmp(a, "help") == 0) { cliPrintf("%-*s ACME cert status; renew [days] to get/renew\n", CLI_HELP_COL, "acme [renew [days]]"); return; }
+        if (cliWantsHelp(a)) {
+            cliPrintf("%-*s show ACME config + certificate state\n", CLI_HELP_COL, "acme");
+            cliPrintf("%-*s get/renew if within [days] of expiry (default 30)\n", CLI_HELP_COL, "acme renew [days]");
             return;
         }
         if (!acmeConfigured()) {
-            cliPrintf("  ACME not configured (need s.net.dns.fqdn + s.acme.enable=1)\n");
+            cliPrintf("ACME not configured (need s.net.dns.fqdn + s.acme.enable=1)\n");
             return;
         }
-        int days = *a ? atoi(a) : 30;
-        acmeCheck(days);
 
-        /* Report result by re-reading the cert. */
+        /* renew [days] | <days> → trigger a check/renew. Bare `acme` is status. */
+        const char* days_arg = nullptr;
+        if (strncmp(a, "renew", 5) == 0 && (a[5] == '\0' || a[5] == ' ')) {
+            days_arg = a + 5;
+            while (*days_arg == ' ') days_arg++;
+        } else if (isdigit((unsigned char)*a)) {
+            days_arg = a;  /* back-compat: `acme 30` */
+        }
+        if (days_arg) acmeCheck(*days_arg ? atoi(days_arg) : 30);
+
+        /* Report current cert state. */
         std::string certPem;
-        if (!stateRead("tls_cert", certPem)) { cliPrintf("  No TLS certificate\n"); return; }
+        if (!stateRead("tls_cert", certPem)) { cliPrintf("no TLS certificate\n"); return; }
         mbedtls_x509_crt crt;
         mbedtls_x509_crt_init(&crt);
         int pr = mbedtls_x509_crt_parse(&crt, (const uint8_t*)certPem.c_str(), certPem.size());
@@ -999,12 +1012,12 @@ void acmeInit() {
                                memcmp(crt.issuer_raw.p, crt.subject_raw.p, crt.issuer_raw.len) == 0);
             char buf[128];
             mbedtls_x509_dn_gets(buf, sizeof(buf), &crt.issuer);
-            cliPrintf("  Done: %s, %s until %04d-%02d-%02d\n",
+            cliPrintf("%s, %s until %04d-%02d-%02d\n",
                       selfSigned ? "self-signed" : "CA-signed",
                       buf,
                       crt.valid_to.year, crt.valid_to.mon, crt.valid_to.day);
         } else {
-            cliPrintf("  Done (cert parse error)\n");
+            cliPrintf("cert parse error\n");
         }
         mbedtls_x509_crt_free(&crt);
     });
