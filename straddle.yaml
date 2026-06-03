@@ -19,9 +19,9 @@ optional_requires:
   - spangap/spangap-web
   # On-device Settings pane via lcdSetting* helpers — gated on CONFIG_SPANGAP_LCD.
   - spangap/spangap-lcd
-# Auto-init: folded into the generated spangapInitStraddles() dispatcher.
-# Needs the net foundation up (TLS/NTP for cert validity) so it sorts just
-# after it, ahead of the default service band.
+# Auto-init: folded into the generated spangapInitStraddles() dispatcher. Runs
+# in the straddle band, after the platform band — so the net foundation it needs
+# (TLS/NTP for cert validity) and the optional spangap-web HTTP-01 handler are
+# already up. requires: spangap-net keeps that guarantee explicit.
 init:
   - call: acmeInit
-    order: 50
