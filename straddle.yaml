@@ -17,7 +17,9 @@ optional_requires:
   # HTTP-01 challenge handler — call sites in acme.cpp gated on
   # CONFIG_SPANGAP_WEB. Drop with --no-web; DNS-01 path keeps working.
   - spangap/spangap-web
-  # On-device Settings pane via lcdSetting* helpers — gated on CONFIG_SPANGAP_LCD.
+  # On-device Settings pane via lcdSetting* helpers. Lives in the
+  # conditional/spangap-lcd/ slice and registers via the when:-gated
+  # acmeLcdRegister hook — compiled only when spangap-lcd is staged.
   - spangap/spangap-lcd
 # Auto-init: folded into the generated spangapInitStraddles() dispatcher. Runs
 # in the straddle band, after the platform band — so the net foundation it needs
@@ -25,3 +27,5 @@ optional_requires:
 # already up. requires: spangap-net keeps that guarantee explicit.
 init:
   - call: acmeInit
+  - call: acmeLcdRegister
+    when: spangap/spangap-lcd
