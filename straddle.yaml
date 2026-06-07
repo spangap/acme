@@ -13,14 +13,10 @@ browser: browser
 platforms: [idf]
 requires:
   - spangap/spangap-net
-optional_requires:
-  # HTTP-01 challenge handler — call sites in acme.cpp gated on
-  # CONFIG_SPANGAP_WEB. Drop with --no-web; DNS-01 path keeps working.
-  - spangap/spangap-web
-  # On-device Settings pane via lcdSetting* helpers. Lives in the
-  # conditional/spangap-lcd/ slice and registers via the when:-gated
-  # acmeLcdRegister hook — compiled only when spangap-lcd is staged.
-  - spangap/spangap-lcd
+# Integration deps are NOT declared here — the build reads them from the code:
+# acme.cpp's HTTP-01 handler is `#if CONFIG_SPANGAP_WEB` (→ spangap-web added to
+# REQUIRES when web is staged), and the conditional/spangap-lcd/ slice implies
+# spangap-lcd. A web-less build runs DNS-01-only; both compile away when absent.
 # Auto-init: folded into the generated spangapInitStraddles() dispatcher. Runs
 # in the straddle band, after the platform band — so the net foundation it needs
 # (TLS/NTP for cert validity) and the optional spangap-web HTTP-01 handler are
