@@ -25,3 +25,9 @@ init:
   - call: acmeInit
   - call: acmeLcdRegister
     when: spangap/spangap-lcd
+# Browser auto-registration (parallel to init:): a buildable with a browser
+# half that stages acme gets registerAcme (acme/modules/acme) imported into the
+# generated straddles.gen.ts + the file: dep injected — the ACME pane appears
+# under Settings → Network automatically, no consumer edit.
+browser_register:
+  - call: registerAcme

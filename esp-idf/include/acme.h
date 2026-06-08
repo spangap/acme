@@ -2,8 +2,8 @@
  * ACME / Let's Encrypt client — DNS-01 challenge via DuckDNS.
  * Obtains and renews TLS certificates automatically.
  */
-#ifndef SECCAM_ACME_H
-#define SECCAM_ACME_H
+#ifndef SPANGAP_ACME_H
+#define SPANGAP_ACME_H
 
 /** Register ACME CLI commands. Call from main. */
 void acmeInit();
