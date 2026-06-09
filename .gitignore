@@ -29,3 +29,6 @@ browser/.quasar/
 
 # Generated browser/npm artifacts (regenerated each build)
 **/package-lock.json
+
+# Build artifacts (spangap-generated)
+esp-idf/build/
