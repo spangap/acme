@@ -30,5 +30,5 @@ static void acmeSettingsPane(void* arg) {
 /* Register the on-device ACME settings pane — a when:-gated init: hook
  * (spangap/spangap-lcd). */
 void acmeLcdRegister(void) {
-    lcdRegisterSettings("Net/ACME", "ACME", acmeSettingsPane);
+    lcdRegisterSettings("Internet/ACME", "ACME", acmeSettingsPane);
 }
