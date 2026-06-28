@@ -23,11 +23,33 @@ requires:
 # already up. requires: spangap-net keeps that guarantee explicit.
 init:
   - call: acmeInit
-  - call: acmeLcdRegister
-    when: spangap/spangap-lcd
 # Browser auto-registration (parallel to init:): a buildable with a browser
 # half that stages acme gets registerAcme (acme/modules/acme) imported into the
 # generated straddles.gen.ts + the file: dep injected — the ACME pane appears
 # under Settings → Network automatically, no consumer edit.
 browser_register:
   - call: registerAcme
+
+# Declarative settings: LCD pane + storage defaults generated from this block.
+# web: false — AcmePanel.vue keeps the web leaf (computed "DNS TXT API" status).
+# Method: empty = auto (DNS-01 if a TXT provider exists, else HTTP-01). The web
+# superset is listed (a web-less LCD build also shows HTTP-01, which errors at
+# runtime if picked without a provider — same as today's web panel).
+settings:
+  - menu:
+      - { id: network, label: "Internet", placement: 2 }
+      - { id: acme, label: "ACME" }
+    web: false
+    rows:
+      - section: "ACME"
+      - switch: { label: "Enable", key: "s.acme.enable", default: 0 }
+      - text:   { label: "Domain", key: "s.net.dns.fqdn" }
+      - dropdown:
+          label: "Method"
+          key: "s.acme.method"
+          default: ""
+          options:
+            - { v: "",        l: "Auto" }
+            - { v: "DNS-01",  l: "DNS-01" }
+            - { v: "HTTP-01", l: "HTTP-01" }
+      - text:   { label: "Account URL", key: "s.acme.url", default: "" }

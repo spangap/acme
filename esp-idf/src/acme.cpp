@@ -944,9 +944,6 @@ void acmeInit() {
     /* Self-register: install own defaults + cron entry on first run / upgrade. */
     int v = storageGetInt("s.acme.version", 0);
     if (v < ACME_VERSION) {
-        storageDefault("s.acme.enable", 0);
-        storageDefault("s.acme.url", "");
-        storageDefault("s.acme.method", "");
         cronDefault("0 3 * * * N", "acme renew 30");
         storageSet("s.acme.version", ACME_VERSION);
     }

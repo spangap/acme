@@ -16,7 +16,7 @@
         <span v-if="dnsTxtCapable != null"> DNS TXT API: {{ dnsTxtCapable ? 'yes' : 'no' }}.</span>
       </div>
 
-      <SettingText label="ACME directory URL" k="s.acme.url" />
+      <SettingText label="Account URL" k="s.acme.url" />
       <div class="text-caption text-grey-5" style="line-height: 1.35">
         Account URL after first successful run; leave blank on a fresh device until the account is created.
       </div>
