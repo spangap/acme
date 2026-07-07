@@ -940,7 +940,7 @@ void acmeCheck(int minDays) {
     vSemaphoreDelete(sem);
 }
 
-void acmeInit() {
+void AcmeService::onInit() {
     /* Self-register: install own defaults + cron entry on first run / upgrade. */
     int v = storageGetInt("s.acme.version", 0);
     if (v < ACME_VERSION) {

@@ -17,13 +17,13 @@ requires:
 # acme.cpp's HTTP-01 handler is `#if CONFIG_SPANGAP_WEB` (→ spangap-web added to
 # REQUIRES when web is staged), and the conditional/spangap-lcd/ slice implies
 # spangap-lcd. A web-less build runs DNS-01-only; both compile away when absent.
-# Auto-init: folded into the generated spangapInitStraddles() dispatcher. Runs
+# Auto-init: AcmeService::onInit is run by the generated boot dispatcher. Runs
 # in the straddle band, after the platform band — so the net foundation it needs
 # (TLS/NTP for cert validity) and the optional spangap-web HTTP-01 handler are
 # already up. requires: spangap-net keeps that guarantee explicit.
-init:
-  - call: acmeInit
-# Browser auto-registration (parallel to init:): a buildable with a browser
+services:
+  - { class: AcmeService, header: acme.h }
+# Browser auto-registration (parallel to services:): a buildable with a browser
 # half that stages acme gets registerAcme (acme/modules/acme) imported into the
 # generated straddles.gen.ts + the file: dep injected — the ACME pane appears
 # under Settings → Network automatically, no consumer edit.
