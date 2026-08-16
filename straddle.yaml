@@ -29,7 +29,7 @@ services:
 # runtime — the same behaviour either way.
 settings:
   - at:
-      - { id: network, label: "Internet", order: 2 }
+      - { id: net }
       - { id: acme, label: "ACME", short: "ACME" }
     rows:
       - section: "ACME"
