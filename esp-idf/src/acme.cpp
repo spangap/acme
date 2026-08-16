@@ -948,6 +948,15 @@ void AcmeService::onInit() {
         storageSet("s.acme.version", ACME_VERSION);
     }
 
+    /* Whether a DNS-01 challenge is reachable, as the words a settings row
+     * shows. The capability itself is a number another straddle publishes
+     * (duckdns raises dns.txtrecord.capable when it holds a token); saying what
+     * it MEANS for this method picker is ours, and saying it once here keeps
+     * both UIs from re-deriving the same sentence. */
+    NOW_AND_ON_CHANGE("dns.txtrecord.capable", {
+        storageSet("acme.dns_txt", atoi(val) ? "yes" : "no");
+    });
+
     /* HTTP-01 challenge serving: handler is registered lazily in acmeTask —
      * acmeInit runs before webInit, so we can't register here. */
 
