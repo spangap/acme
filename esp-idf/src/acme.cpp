@@ -11,7 +11,6 @@
 #include "tls.h"
 #include "fs.h"
 #include "storage.h"
-#include "cron.h"
 #include "cli.h"
 #include "log.h"
 #if CONFIG_SPANGAP_WEB
@@ -46,9 +45,6 @@
 
 #define ACME_DIR "https://acme-v02.api.letsencrypt.org/directory"
 #define ACME_TASK_STACK 16384
-
-/* Module config version. Bump when adding/changing defaults. See duckdns.cpp. */
-#define ACME_VERSION 1
 
 /* ---- State file helpers (certs on /state/ LittleFS partition) ---- */
 
@@ -940,20 +936,28 @@ void acmeCheck(int minDays) {
     vSemaphoreDelete(sem);
 }
 
+/* The daily renew cron entry exists exactly while ACME is configured
+ * (s.acme.enable + s.net.dns.fqdn). storageDefault (not Set) so a user's
+ * schedule tweak survives while configured. Hosted on the storage task —
+ * this module has no long-lived task of its own. */
+static void acmeApplyCron(const char*, const char*) {
+    if (acmeConfigured())
+        storageDefault("s.cron.tab.acme", "0 3 * * * N acme renew 30");
+    else if (storageExists("s.cron.tab.acme"))
+        storageUnset("s.cron.tab.acme");
+}
+
 void AcmeService::onInit() {
-    /* Self-register: install own defaults + cron entry on first run / upgrade. */
-    int v = storageGetInt("s.acme.version", 0);
-    if (v < ACME_VERSION) {
-        cronDefault("0 3 * * * N", "acme renew 30");
-        storageSet("s.acme.version", ACME_VERSION);
-    }
+    storageSubscribeChanges("s.acme.enable",  acmeApplyCron, /*onStorageTask=*/true);
+    storageSubscribeChanges("s.net.dns.fqdn", acmeApplyCron, /*onStorageTask=*/true);
+    acmeApplyCron(nullptr, nullptr);
 
     /* Whether a DNS-01 challenge is reachable, as the words a settings row
      * shows. The capability itself is a number another straddle publishes
      * (duckdns raises dns.txtrecord.capable when it holds a token); saying what
      * it MEANS for this method picker is ours, and saying it once here keeps
      * both UIs from re-deriving the same sentence. */
-    NOW_AND_ON_CHANGE("dns.txtrecord.capable", {
+    NOW_AND_ON_CHANGE_DIRECT("dns.txtrecord.capable", {
         storageSet("acme.dns_txt", atoi(val) ? "yes" : "no");
     });
 

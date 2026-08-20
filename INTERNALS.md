@@ -31,8 +31,6 @@ the browser:
   resource), written after `newAccount` and reused as the JWS `kid`. This is the
   account, **not** the directory; the directory endpoint is the hard-coded
   `ACME_DIR` constant.
-- `s.acme.version` — internal bookkeeping for the one-time cron seed in
-  `acmeInit()`; it gates whether `cronDefault(...)` is installed, not a feature.
 
 **Borrowed keys** (owned by other straddles):
 
@@ -42,10 +40,14 @@ the browser:
   cleared. This is the integration seam: acme sets it, duckdns publishes the TXT
   record on change.
 
-**Cron entry** — `acmeInit()` seeds `cronDefault("0 3 * * * N", "acme renew 30")`
-once (gated by `s.acme.version`). That is **daily at 03:00**, with the `N` flag
-("upstream network required"), running `acme renew 30`. Renewal is cron-driven:
-`acmeCheck()` has **no boot-time caller** — nothing runs it at startup.
+**Cron entry** — `s.cron.tab.acme = "0 3 * * * N acme renew 30"`, present
+exactly while ACME is configured (`s.acme.enable` + `s.net.dns.fqdn`):
+`acmeApplyCron()` installs it with `storageDefault` (a user's schedule tweak
+survives while configured) and removes it on disable, applied at init and via
+storage-task-hosted subscriptions on both gate keys. That is **daily at 03:00**,
+with the `N` flag ("upstream network required"), running `acme renew 30`.
+Renewal is cron-driven: `acmeCheck()` has **no boot-time caller** — nothing runs
+it at startup.
 
 **HTTP-01 URL handler** — registered only under `CONFIG_SPANGAP_WEB`:
 `webRegisterHandler(".well-known/acme-challenge", acmeHttp01Handler)`. It serves
