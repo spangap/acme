@@ -92,8 +92,8 @@ surface.
 | Key | Default | Meaning |
 |---|---|---|
 | `s.acme.enable` | `0` | Master switch. Renewal does nothing unless this is `1` (and `s.net.dns.fqdn` is set). |
-| `s.acme.method` | `""` | Challenge method: `""` (auto), `DNS-01`, or `HTTP-01`. |
-| `s.acme.url` | `""` | The ACME **account URL**, written by acme after the account is created and reused (as the JWS `kid`) on later runs. Leave blank on a fresh device. |
+| `s.acme.method` | `""` | Challenge method: `""` (auto), `DNS-01`, or `HTTP-01`. Not on the settings pane — the auto path is the whole point, and there is nothing here for an operator to decide. Reachable from the CLI for a device being driven from one. |
+| `s.acme.url` | `""` | The ACME **account URL**, written by acme after the account is created and reused (as the JWS `kid`) on later runs. Written by the first successful run, so it is not on the settings pane either. |
 
 The directory endpoint itself is not configurable — it is hard-coded to Let's
 Encrypt production (`https://acme-v02.api.letsencrypt.org/directory`).

@@ -24,28 +24,18 @@ services:
   - { class: AcmeService, header: acme.h }
 
 # Declarative settings: both surfaces + the storage defaults generated from this
-# block. Method: empty = auto (DNS-01 if a TXT provider exists, else HTTP-01).
-# HTTP-01 is listed even on a web-less build, where picking it errors at
-# runtime — the same behaviour either way.
+# block. Two rows and no more, because there is nothing here for an operator to
+# decide: the challenge method is chosen at run time (DNS-01 where a TXT
+# provider exists, else HTTP-01) and the account URL is something the first
+# successful run writes down. Both stay reachable as `s.acme.method` and
+# `s.acme.url` for a device being driven from the CLI.
 settings:
   - at:
       - { id: net }
-      - { id: acme, label: "ACME", short: "ACME" }
+      - { id: reachable }
+    order: 4
     rows:
-      - section: "ACME"
+      - heading: "ACME"
+      - caption: "To not have to accept the certificate warnings, you need a browser-recognized certificate. We've fully automated the process of obtaining a certificate at Let's Encrypt, as long as either a) Let's Encrypt's servers can reach port 80 of your device via the DNS name specified or b) you are using our Duck DNS component."
       - switch: { label: "Enable ACME (Let's Encrypt)", key: "s.acme.enable", default: 0 }
-      - text:   { label: "Domain (FQDN)", key: "s.net.dns.fqdn" }
-      - dropdown:
-          label: "Challenge method"
-          key: "s.acme.method"
-          default: ""
-          options:
-            - { v: "",        l: "Auto" }
-            - { v: "DNS-01",  l: "DNS-01" }
-            - { v: "HTTP-01", l: "HTTP-01" }
-      - caption: "Auto uses DNS-01 when a TXT API is available, otherwise HTTP-01."
-      # acme.cpp turns duckdns's dns.txtrecord.capable flag into the word to
-      # show, so neither UI has to know what the flag means.
-      - value:  { label: "DNS TXT API", key: "acme.dns_txt" }
-      - text:   { label: "Account URL", key: "s.acme.url", default: "" }
-      - caption: "The account URL appears after the first successful run; leave it blank on a fresh device."
+      - text:   { label: "DNS name", key: "s.net.dns.fqdn" }
